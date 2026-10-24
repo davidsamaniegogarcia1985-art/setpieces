@@ -793,10 +793,16 @@ class Board{
   items.sort((a,b)=>a.z-b.z||a.i-b.i).forEach(it=>{w+=it.f()});w+=handles;
   if(this.drag&&this.drag.k==='box'){const A=this.drag.a,B=this.drag.b;w+=`<rect x="${r2(Math.min(A.x,B.x))}" y="${r2(Math.min(A.y,B.y))}" width="${r2(Math.abs(A.x-B.x))}" height="${r2(Math.abs(A.y-B.y))}" fill="rgba(0,229,255,.12)" stroke="#00E5FF" stroke-width=".25" stroke-dasharray=".8 .5"/>`}
   const base=this.o.print||op<100?'#FFFFFF':'#2F8A3B';
-  let fv=this.o.fitWidth?this.fitVB(vb,v):vb;if(this.o.fitAll)fv=this.contentVB(vb,v);
+  let fv=this.o.fitWidth?this.fitVB(vb,v):vb;if(this.o.fitAll)fv=this.contentVB(vb,v);if(this.o.fitAR)fv=this.fitAspect(fv,v,this.o.fitAR);
   this.svg.setAttribute('viewBox',fv.map(r2).join(' '));
   this.svg.innerHTML=`<defs>${Object.values(this.pats).join('')}</defs><rect x="${fv[0]}" y="${fv[1]}" width="${fv[2]}" height="${fv[3]}" fill="${base}"/><g id="${this.id}w"${v.r?' transform="translate(105 0) rotate(90)"':''}>${w}</g>`;
  }
+ fitAspect(fv,v,ar){let [x,y,w,h]=fv;const cur=w/h;if(Math.abs(cur-ar)<.005)return fv;
+  if(cur<ar){const nw=h*ar,ex=nw-w;x-=ex/2;w=nw;const L=v.r?-3:-3,R=v.r?108:71;if(nw<=R-L){if(x<L)x=L;if(x+w>R)x=R-w}}
+  else{const nh=w/ar,ex=nh-h;const T=v.r?-3:-3,B=v.r?71:108;
+   if(v.r){y-=ex/2}else{const goalTop=(y+h/2)<52.5;y=goalTop?y:y-ex}
+   h=nh;if(nh<=B-T){if(y<T)y=T;if(y+h>B)y=B-h}else{y=T-(nh-(B-T))/2}}
+  return [x,y,w,h]}
  contentVB(vb,v){const Sc=this.sc(),S=p=>v.r?{x:105-p.y,y:p.x}:p,X=[vb[0],vb[0]+vb[2]],Y=[vb[1],vb[1]+vb[3]];const zm=this.zoom()>1.001,mgx=vb[2]*.12,mgy=vb[3]*.12;const add=(x0,y0,x1,y1)=>{if([x0,y0,x1,y1].some(n=>!isFinite(n)))return;if(zm){const cx=(x0+x1)/2,cy=(y0+y1)/2;if(cx<vb[0]-mgx||cx>vb[0]+vb[2]+mgx||cy<vb[1]-mgy||cy>vb[1]+vb[3]+mgy)return}X.push(x0,x1);Y.push(y0,y1)};
   this.p.tokens.forEach(t=>{const R0=this.tokRadius(t);let nm='';try{const pid=t.pid?this.o.resolve(t.pid):null,pl=pid?playerById(pid):null;nm=pl?pname(pl):(t.st&&t.st.nameText)||''}catch(e){}const st=EQUIP[t.type]||t.type==='ball'?null:this.tokStyle(t);const fs=st?1.15*(st.nameSize||1):0,hw=nm?Math.max(R0,String(nm).length*fs*.36+.4):R0;
    this.p.frames.forEach((_,i)=>{const q=S(this.pos(t.id,i));add(q.x-hw-.4,q.y-R0-(t.sig?3.6:.5),q.x+hw+.4,q.y+R0+(nm?fs*1.6+.6:.5))})});
@@ -968,9 +974,9 @@ class PDF{
   return new Blob(parts,{type:'application/pdf'})}
 }
 async function canvasJPEG(cv,q=.9){const url=cv.toDataURL('image/jpeg',q);const bin=atob(url.split(',')[1]);const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return {bytes:b,w:cv.width,h:cv.height}}
-async function playImage(play,ctx,{landscape,bw,nums}){
+async function playImage(play,ctx,{landscape,bw,nums,ar}){
  let ov=null;if(landscape&&play.view==='vfull'&&!((play.zoom||1)>1))ov='hfull';
- const d=document.createElement('div');const b=new Board(d,play,{mode:'view',teamObj:ctx.team,opp:ctx.opp,names:nums,nums,print:bw,viewOverride:ov,fitAll:true});
+ const d=document.createElement('div');const b=new Board(d,play,{mode:'view',teamObj:ctx.team,opp:ctx.opp,names:nums,nums,print:bw,viewOverride:ov,fitAll:true,fitAR:ar||null});
  const vb=b.svg.getAttribute('viewBox').split(' ').map(Number);const W=1800,H=Math.round(W*vb[3]/vb[2]);const cv=await svgToCanvas(b.svg,W,H,'#ffffff');return {...await canvasJPEG(cv),ar:vb[2]/vb[3]}}
 function lineupSVG(p,bw){const t=team(p.teamId);const def={},groups={POR:[],DEF:[],MED:[],DEL:[]};p.starters.forEach(id=>{const x=playerById(id);if(x)groups[x.pos].push(id)});
  Object.entries(groups).forEach(([pos,arr])=>{const X={POR:6,DEF:26,MED:52,DEL:76}[pos];arr.forEach((id,i)=>def[id]={x:X,y:Math.round((i+1)*68/(arr.length+1))})});
@@ -979,6 +985,8 @@ function lineupSVG(p,bw){const t=team(p.teamId);const def={},groups={POR:[],DEF:
  const L=`fill="none" stroke="${lc}" stroke-width=".3"`;s+=`<rect width="105" height="68" ${L}/><line x1="52.5" y1="0" x2="52.5" y2="68" stroke="${lc}" stroke-width=".3"/><circle cx="52.5" cy="34" r="9.15" ${L}/><rect x="0" y="13.84" width="16.5" height="40.32" ${L}/><rect x="88.5" y="13.84" width="16.5" height="40.32" ${L}/><rect x="0" y="24.84" width="5.5" height="18.32" ${L}/><rect x="99.5" y="24.84" width="5.5" height="18.32" ${L}/>`;
  p.starters.forEach(id=>{const x=playerById(id);if(!x)return;const q=P(id),gk=x.pos==='POR';s+=`<g data-id="${id}" transform="translate(${q.x} ${q.y})" style="cursor:grab"><circle r="2.6" fill="${gk?t.gk:t.c1}" stroke="${bw?'#000':'#fff'}" stroke-width=".35"/><text y=".95" text-anchor="middle" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="800" font-size="2.6" fill="#fff">${esc(pnum(x))}</text><text y="5" text-anchor="middle" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="700" font-size="2" fill="${bw?'#111':'#fff'}" stroke="${bw?'#fff':'rgba(0,0,0,.6)'}" stroke-width=".3" paint-order="stroke">${esc(pname(x))}</text></g>`});
  return s}
+/* landscape page: header bar height, side and bottom safe margins for printers (pt) */
+const LHH=52,LSM=16,LBM=18;
 async function makePDF({plan:p,plays,ctx,landscape,bw,nums,cover},prog){
  const pdf=new PDF(),W=landscape?842:595,H=landscape?595:842,M=32,RED=bw?'#111111':'#C3102C';
  const t=ctx.team,matchTxt=p?(p.home?`${t.name} vs ${p.opp.name}`:`${p.opp.name} vs ${t.name}`):(ctx.title||'Jugadas favoritas');
@@ -995,20 +1003,20 @@ async function makePDF({plan:p,plays,ctx,landscape,bw,nums,cover},prog){
   pdf.text(M,y,'ÍNDICE DE JUGADAS',12,true,RED);y+=18;
   plays.forEach((pl,i)=>{if(y>H-M){pdf.page(W,H);y=M+10}pdf.text(M,y,`${i+1}.`,10,true);pdf.text(M+24,y,pl.name,10,true);pdf.text(M+260,y,`${action(pl.actionId)?.name||''}  ·  ${pl.side==='def'?'Defensiva':'Ofensiva'}`,10,false,'#555555');y+=14})}
  for(let i=0;i<plays.length;i++){const pl=plays[i];prog(`Jugada ${i+1} de ${plays.length}: ${pl.name}`);
-  const img=await playImage(pl,{team:ctx.team,opp:ctx.opp},{landscape,bw,nums});pdf.page(W,H);
+  const img=await playImage(pl,{team:ctx.team,opp:ctx.opp},{landscape,bw,nums,ar:landscape?(W-2*LSM)/(H-LHH-6-LBM-((pl.task?[pl.task.obj,pl.task.desc,pl.task.var,pl.task.keys].some(x=>x&&String(x).trim()):pl.notes)?14:0)):null});pdf.page(W,H);
   const tk=pl.task;const sub=tk?[tk.cat,tk.dur?'Duración: '+tk.dur+(/\d$/.test(tk.dur)?' min':''):'',tk.series?'Series: '+tk.series:'',tk.players?'Jugadores: '+tk.players:'',tk.space?'Espacio: '+tk.space:''].filter(Boolean).join('  ·  '):[action(pl.actionId)?.name,pl.side==='def'?'Defensiva':'Ofensiva',pl.signal?'Señal: '+pl.signal:''].filter(Boolean).join('  ·  ');
   const secs=tk?[['OBJETIVO',tk.obj],['DESCRIPCIÓN',tk.desc],['VARIANTES',tk.var],['PUNTOS CLAVE',tk.keys]].filter(x=>x[1]&&String(x[1]).trim()):[];
   const notesTxt=tk?secs.map(x=>x[0][0]+x[0].slice(1).toLowerCase()+': '+String(x[1]).replace(/\s+/g,' ')).join('   ·   '):pl.notes;
   const roles=pl.tokens.filter(tk=>(tk.type==='own'||tk.type==='owngk')&&(tk.pid||tk.note)).map(tk=>{const x=tk.pid?playerById(tk.pid):null;return {n:x?String(pnum(x)):(tk.label||'·'),nm:x?pname(x):'',note:tk.note||''}}).sort((a,b)=>(+a.n||99)-(+b.n||99));
-  if(landscape){const hh=34;pdf.rect(0,0,W,hh,RED);pdf.text(M,22,`${plays.length>1?(i+1)+'. ':''}${pl.name}`,16,true,'#FFFFFF');pdf.text(W-M,22,sub,9,false,'#FFFFFF','right');
-   const foot=notesTxt?14:0,aw=W-16,ah=H-hh-12-foot;let iw=aw,ih=iw/img.ar;if(ih>ah){ih=ah;iw=ih*img.ar}pdf.image(img,(W-iw)/2,hh+6,iw,ih);
-   if(notesTxt)pdf.text(M,H-8,pdf.wrap(notesTxt,9,false,W-M*2)[0],9,false,'#333333')}
+  if(landscape){const hh=LHH;pdf.rect(0,0,W,hh,RED);pdf.text(M,hh-14,`${plays.length>1?(i+1)+'. ':''}${pl.name}`,16,true,'#FFFFFF');pdf.text(W-M,hh-14,sub,9,false,'#FFFFFF','right');
+   const foot=notesTxt?14:0,aw=W-2*LSM,ah=H-hh-6-LBM-foot;let iw=aw,ih=iw/img.ar;if(ih>ah){ih=ah;iw=ih*img.ar}pdf.image(img,(W-iw)/2,hh+6,iw,ih);
+   if(notesTxt)pdf.text(M,H-LBM+2,pdf.wrap(notesTxt,9,false,W-M*2-150)[0],9,false,'#333333')}
   else{const hh=64;pdf.rect(0,0,W,hh,RED);pdf.text(M,30,`${plays.length>1?(i+1)+'. ':''}${pl.name}`,20,true,'#FFFFFF');pdf.text(M,50,sub,10,false,'#FFFFFF');
    const secL=secs.map(x=>pdf.wrap(String(x[1]),10,false,W-M*2).slice(0,6));const secH=secL.reduce((a,l)=>a+18+l.length*13+4,0);
    const extra=Math.min(tk?330:260,(tk?secH:(pl.notes?40:0))+(roles.length?24+Math.ceil(roles.length/2)*15:0));const aw=W-M*2,ah=H-hh-24-extra-M;let iw=aw,ih=iw/img.ar;if(ih>ah){ih=ah;iw=ih*img.ar}pdf.image(img,(W-iw)/2,hh+14,iw,ih);
    let y=hh+14+ih+24;if(tk){secs.forEach((x,si)=>{pdf.text(M,y,x[0],10,true,RED);y+=14;secL[si].forEach(l=>{pdf.text(M,y,l,10,false,'#222222');y+=13});y+=6})}else if(pl.notes){pdf.wrap(pl.notes,10,false,W-M*2).slice(0,3).forEach(l=>{pdf.text(M,y,l,10,false,'#222222');y+=13});y+=6}
    if(roles.length){pdf.text(M,y,'FUNCIONES',11,true,RED);y+=16;const half=Math.ceil(roles.length/2);roles.forEach((r,k)=>{const x=k<half?M:M+(W-M*2)/2,yy=y+(k%half)*15;pdf.text(x,yy,r.n,10,true);pdf.text(x+22,yy,(r.nm?r.nm+(r.note?': ':''):'')+r.note,9,false,'#222222')})}}
-  pdf.text(W-M,H-8,`SET PIECES HAPOEL TEL AVIV · ${matchTxt}`,7,false,'#888888','right')}
+  pdf.text(W-M,landscape?H-LBM+2:H-8,`SET PIECES HAPOEL TEL AVIV · ${matchTxt}`,7,false,'#888888','right')}
  return pdf.build()}
 let PDFO={landscape:false,bw:false,nums:true,scope:'plan'};
 function pdfDialog(scope){PDFO.scope=scope;const one=scope==='play';
